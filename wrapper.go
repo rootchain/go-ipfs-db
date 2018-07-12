@@ -19,63 +19,77 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethdb"
 
-	cid "github.com/ipfs/go-cid"
 	shell "github.com/ipfs/go-ipfs-api"
 	multihash "github.com/multiformats/go-multihash"
-)
 
-var ipfs = shell.NewShellWithClient("http://localhost:5001", http.DefaultClient)
+	cid "gx/ipfs/QmapdYm1b22Frv3k17fqrBYTFRxwiaVJkB299Mfn33edeB/go-cid"
+)
 
 // Wrap - Wraps database with IPFS storage.
 func Wrap(db ethdb.Database) ethdb.Database {
-	return &dbWrap{Database: db}
+	return WrapURL(db, "http://localhost:5001")
 }
 
-type dbWrap struct {
+// WrapURL - Wraps database with IPFS storage.
+func WrapURL(db ethdb.Database, url string) ethdb.Database {
+	client := newClient(url)
+	return &wrapDB{Database: db, client: client}
+}
+
+type wrapDB struct {
 	ethdb.Database
+	client *wrapClient
 }
 
-func (db *dbWrap) Get(key []byte) (value []byte, err error) {
-	v, err := db.Database.Get(key)
-	if err == nil {
+func (db *wrapDB) Get(key []byte) (value []byte, err error) {
+	if v, err := db.Database.Get(key); err == nil {
 		return v, nil
 	}
-	return ipfsGet(key)
+	return db.client.Get(key)
 }
 
-func (db *dbWrap) Put(key []byte, value []byte) error {
-	if err := ipfsPut(key, value); err != nil {
+func (db *wrapDB) Put(key []byte, value []byte) error {
+	if err := db.Database.Put(key, value); err != nil {
 		return err
 	}
-	return db.Database.Put(key, value)
+	return db.client.Put(key, value)
 }
 
-func (db *dbWrap) NewBatch() ethdb.Batch {
-	return &batchWrap{Batch: db.Database.NewBatch()}
+func (db *wrapDB) NewBatch() ethdb.Batch {
+	return &wrapBatch{Batch: db.Database.NewBatch(), client: db.client}
 }
 
-type batchWrap struct {
+type wrapBatch struct {
 	ethdb.Batch
+	client *wrapClient
 }
 
-func (batch *batchWrap) Put(key, value []byte) error {
-	if err := ipfsPut(key, value); err != nil {
+func (batch *wrapBatch) Put(key, value []byte) error {
+	if err := batch.client.Put(key, value); err != nil {
 		return err
 	}
 	return batch.Batch.Put(key, value)
 }
 
-func ipfsPut(key, value []byte) (err error) {
+type wrapClient struct {
+	*shell.Shell
+}
+
+func newClient(url string) *wrapClient {
+	return &wrapClient{Shell: shell.NewShellWithClient(url, http.DefaultClient)}
+}
+
+func (client *wrapClient) Put(key, value []byte) (err error) {
 	if len(value) == 0 {
 		return
 	}
-	_, err = ipfs.BlockPut(value, "eth-state-trie", "keccak-256", 32)
+	_, err = client.BlockPut(value, "eth-state-trie", "keccak-256", 32)
 	return
 }
 
-func ipfsGet(key []byte) (value []byte, err error) {
-	mhash, _ := multihash.EncodeName(key, "keccak-256")
+func (client *wrapClient) Get(key []byte) (value []byte, err error) {
+	mhash, _ := multihash.Encode(key, multihash.KECCAK_256)
 	c := cid.NewCidV1(cid.EthStateTrie, mhash).String()
-	value, err = ipfs.BlockGet(c)
+	value, err = client.BlockGet(c)
 	return
 }
