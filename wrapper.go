@@ -20,8 +20,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 
 	shell "github.com/ipfs/go-ipfs-api"
-	multihash "github.com/multiformats/go-multihash"
 
+	mh "gx/ipfs/QmPnFwZ2JXKnXgMw8CdBPxn7FWh6LLdjUjxV1fKHuJnkr8/go-multihash"
 	cid "gx/ipfs/QmapdYm1b22Frv3k17fqrBYTFRxwiaVJkB299Mfn33edeB/go-cid"
 )
 
@@ -52,7 +52,7 @@ func (db *wrapDB) Put(key []byte, value []byte) error {
 	if err := db.Database.Put(key, value); err != nil {
 		return err
 	}
-	return db.client.Put(key, value)
+	return db.client.Put(value)
 }
 
 func (db *wrapDB) NewBatch() ethdb.Batch {
@@ -65,10 +65,10 @@ type wrapBatch struct {
 }
 
 func (batch *wrapBatch) Put(key, value []byte) error {
-	if err := batch.client.Put(key, value); err != nil {
+	if err := batch.Batch.Put(key, value); err != nil {
 		return err
 	}
-	return batch.Batch.Put(key, value)
+	return batch.client.Put(value)
 }
 
 type wrapClient struct {
@@ -79,7 +79,7 @@ func newClient(url string) *wrapClient {
 	return &wrapClient{Shell: shell.NewShellWithClient(url, http.DefaultClient)}
 }
 
-func (client *wrapClient) Put(key, value []byte) (err error) {
+func (client *wrapClient) Put(value []byte) (err error) {
 	if len(value) == 0 {
 		return
 	}
@@ -88,7 +88,7 @@ func (client *wrapClient) Put(key, value []byte) (err error) {
 }
 
 func (client *wrapClient) Get(key []byte) (value []byte, err error) {
-	mhash, _ := multihash.Encode(key, multihash.KECCAK_256)
+	mhash, _ := mh.Encode(key, mh.KECCAK_256)
 	c := cid.NewCidV1(cid.EthStateTrie, mhash).String()
 	value, err = client.BlockGet(c)
 	return

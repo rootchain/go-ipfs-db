@@ -22,9 +22,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethdb"
 	cells "github.com/ipfn/go-ipfn-cells"
-	multihash "github.com/multiformats/go-multihash"
 	"github.com/stretchr/testify/assert"
 
+	mh "gx/ipfs/QmPnFwZ2JXKnXgMw8CdBPxn7FWh6LLdjUjxV1fKHuJnkr8/go-multihash"
 	cid "gx/ipfs/QmapdYm1b22Frv3k17fqrBYTFRxwiaVJkB299Mfn33edeB/go-cid"
 )
 
@@ -52,7 +52,7 @@ func TestWrapped_Rand(t *T) {
 		c, _ := cells.SumCID(cid.Prefix{
 			Version:  1,
 			Codec:    cid.EthStateTrie,
-			MhType:   multihash.KECCAK_256,
+			MhType:   mh.KECCAK_256,
 			MhLength: 32,
 		}, value)
 		hash := c.Digest()
