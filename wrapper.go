@@ -17,6 +17,8 @@ package ipfsdb
 import (
 	"net/http"
 
+	"github.com/ipfn/go-ipfn-cmd-util/logger"
+
 	"github.com/ethereum/go-ethereum/ethdb"
 
 	shell "github.com/ipfs/go-ipfs-api"
@@ -26,13 +28,13 @@ import (
 )
 
 // Wrap - Wraps database with IPFS storage.
-func Wrap(db ethdb.Database) ethdb.Database {
-	return WrapURL(db, "http://localhost:5001")
+func Wrap(prefix cid.Prefix, db ethdb.Database) ethdb.Database {
+	return WrapURL(prefix, db, "http://localhost:5001")
 }
 
 // WrapURL - Wraps database with IPFS storage.
-func WrapURL(db ethdb.Database, url string) ethdb.Database {
-	client := newClient(url)
+func WrapURL(prefix cid.Prefix, db ethdb.Database, url string) ethdb.Database {
+	client := newClient(prefix, url)
 	return &wrapDB{Database: db, client: client}
 }
 
@@ -73,23 +75,33 @@ func (batch *wrapBatch) Put(key, value []byte) error {
 
 type wrapClient struct {
 	*shell.Shell
+	cid.Prefix
 }
 
-func newClient(url string) *wrapClient {
-	return &wrapClient{Shell: shell.NewShellWithClient(url, http.DefaultClient)}
+func newClient(prefix cid.Prefix, url string) *wrapClient {
+	return &wrapClient{
+		Shell:  shell.NewShellWithClient(url, http.DefaultClient),
+		Prefix: prefix,
+	}
 }
 
 func (client *wrapClient) Put(value []byte) (err error) {
 	if len(value) == 0 {
 		return
 	}
-	_, err = client.BlockPut(value, "eth-state-trie", "keccak-256", 32)
+	cid, err := client.BlockPut(value, cid.CodecToStr[client.Prefix.Codec], mh.Codes[client.Prefix.MhType], client.Prefix.MhLength)
+	if err != nil {
+		logger.Debugw("IPFS BlockPut", "err", err)
+		return
+	}
+	logger.Debugw("IPFS BlockPut", "cid", cid)
 	return
 }
 
 func (client *wrapClient) Get(key []byte) (value []byte, err error) {
-	mhash, _ := mh.Encode(key, mh.KECCAK_256)
-	c := cid.NewCidV1(cid.EthStateTrie, mhash).String()
+	mhash, _ := mh.Encode(key, client.Prefix.MhType)
+	c := cid.NewCidV1(client.Prefix.Codec, mhash).String()
+	logger.Debugw("IPFS BlockGet", "cid", c)
 	value, err = client.BlockGet(c)
 	return
 }
